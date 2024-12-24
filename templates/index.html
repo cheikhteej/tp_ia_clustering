@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plateforme d'Analyse de Malware</title>
+    <link rel="stylesheet" href="{{url_for('static',filename='index.css')}}">
+</head>
+<body>
+    <div class="container">
+        <h1>Plateforme d'Analyse de Malware</h1>
+        <form id="uploadForm" action="/analyze" method="post" enctype="multipart/form-data">
+            <div class="drop-zone">
+                <div class="drop-zone-text">
+                    <p>Déposez les fichiers à analyser ici</p>
+                    <p>ou</p>
+                </div>
+                <button type="button" class="file-select-btn" onclick="document.getElementById('fileInput').click()">
+                    Sélectionner un fichier
+                </button>
+                <input type="file" id="fileInput" name="file" accept=".exe,.dll,.bin" style="display: none">
+            </div>
+            
+            <div class="scan-section">
+                <button type="button" id="scanButton" disabled>Démarrer l'analyse</button>
+                <div class="status-box">
+                    <div id="status">En attente d'un fichier</div>
+                    <div class="progress-container">
+                        <div id="progressBar"></div>
+                    </div>
+                </div>
+                <div id="scanResults"></div>
+            </div>
+        </form>
+    </div>
+
+    <script>
+const uploadForm = document.getElementById('uploadForm');
+const fileInput = document.getElementById('fileInput');
+const progressBar = document.getElementById('progressBar');
+const status = document.getElementById('status');
+const scanResults = document.getElementById('scanResults');
+const dropZone = document.querySelector('.drop-zone');
+const scanButton = document.getElementById('scanButton');
+
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+});
+
+dropZone.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+});
+
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        fileInput.files = files;
+        handleFileSelection(files[0]);
+    }
+});
+
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+        handleFileSelection(e.target.files[0]);
+    }
+});
+
+function handleFileSelection(file) {
+    if (file) {
+        status.textContent = 'Fichier sélectionné: ' + file.name;
+        scanButton.disabled = false;
+    }
+}
+
+scanButton.addEventListener('click', () => {
+    if (!fileInput.files.length) {
+        alert('Veuillez sélectionner un fichier à analyser');
+        return;
+    }
+
+    const formData = new FormData(uploadForm);
+    scanButton.disabled = true;
+    status.textContent = 'Analyse en cours...';
+    status.classList.add('scanning');
+    progressBar.style.width = '0%';
+    scanResults.innerHTML = '';
+
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+        if (progress < 90) {
+            progress += 5;
+            progressBar.style.width = progress + '%';
+        }
+    }, 200);
+
+    fetch('/malware_test', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        clearInterval(progressInterval);
+        progressBar.style.width = '100%';
+        status.classList.remove('scanning');
+        
+        const resultElement = document.createElement('div');
+        resultElement.className = 'result-item ' + (data.y_pred === 0 ? 'safe' : 'threat');
+        
+        if (data.y_pred == 0) {
+            status.textContent = 'Analyse terminée - Aucune menace détectée';
+            resultElement.textContent = 'Fichier sûr - Aucun malware détecté';
+        } else {
+            status.textContent = 'Analyse terminée - Menace détectée!';
+            resultElement.textContent = 'ATTENTION - Malware détecté!';
+        }
+        
+        scanResults.appendChild(resultElement);
+        scanButton.disabled = false;
+    })
+    .catch(error => {
+        clearInterval(progressInterval);
+        status.classList.remove('scanning');
+        status.textContent = 'Erreur lors de l\'analyse';
+        
+        const errorElement = document.createElement('div');
+        errorElement.className = 'result-item threat';
+        errorElement.textContent = 'Erreur: ' + error.message;
+        scanResults.appendChild(errorElement);
+        
+        scanButton.disabled = false;
+    });
+});
+    </script>
+</body>
+</html>
